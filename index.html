@@ -2,60 +2,53 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Energy Memo - 治愈系待办</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Energy Memo - 云端同步版</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        'healing-bg': '#fdfcf8',      // 默认米白
-                        'healing-warm': '#fff7ed',    // 暖调（高能量）
-                        'healing-cold': '#f1f5f9',    // 冷调（低能量）
-                        'card': '#ffffff',
-                        'text-main': '#475569',       // 低饱和蓝灰
-                        'text-sub': '#94a3b8',
+                        'healing-bg': '#fdfcf8',
+                        'healing-warm': '#fff7ed',
+                        'healing-cold': '#f1f5f9',
                     },
-                    fontFamily: {
-                        sans: ['-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-                    }
+                    fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', 'sans-serif'] }
                 }
             }
         }
     </script>
-    
     <style>
-        /* 额外的平滑过渡动画 */
         body { transition: background-color 1s ease; }
         .energy-bar-fill { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s ease; }
-        
-        /* Markdown 内容样式微调 */
         .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin: 0.5em 0; }
-        .markdown-body h1, .markdown-body h2 { font-weight: bold; margin-top: 0.5em; }
-        .markdown-body p { margin-bottom: 0.5em; line-height: 1.6; }
-        .markdown-body blockquote { border-left: 3px solid #cbd5e1; padding-left: 1em; color: #64748b; }
+        .markdown-body p { margin-bottom: 0.5em; }
     </style>
 </head>
-<body class="bg-healing-bg text-text-main min-h-screen flex justify-center selection:bg-orange-100">
+<body class="bg-healing-bg text-slate-600 min-h-screen flex justify-center selection:bg-orange-100">
 
     <div class="w-full max-w-md p-6 relative pb-32">
         
         <header class="mb-8 pt-4">
             <div class="flex justify-between items-end mb-2">
-                <h1 class="text-2xl font-bold tracking-tight text-slate-700">当前状态</h1>
+                <div class="flex flex-col">
+                    <h1 class="text-2xl font-bold tracking-tight text-slate-700">当前状态</h1>
+                    <div id="sync-status" class="text-[10px] text-slate-400 flex items-center gap-1 mt-1 opacity-0 transition-opacity">
+                        <span class="w-2 h-2 rounded-full bg-slate-300"></span> 本地模式
+                    </div>
+                </div>
+                
                 <div class="flex items-center gap-3">
-                    <button onclick="updateEnergy(-5)" class="text-slate-400 hover:text-slate-600 active:scale-90 transition p-1">
+                    <button onclick="updateEnergy(-5)" class="text-slate-400 hover:text-slate-600 p-1">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
                     </button>
-                    
                     <span id="energy-display" class="text-3xl font-black text-slate-700 font-mono">100</span>
-                    
-                    <button onclick="updateEnergy(5)" class="text-slate-400 hover:text-slate-600 active:scale-90 transition p-1">
+                    <button onclick="updateEnergy(5)" class="text-slate-400 hover:text-slate-600 p-1">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                     </button>
                 </div>
@@ -64,101 +57,172 @@
             <div class="w-full h-4 bg-gray-200/50 rounded-full overflow-hidden shadow-inner">
                 <div id="energy-bar" class="energy-bar-fill h-full bg-green-400 w-full rounded-full"></div>
             </div>
-            <p id="status-text" class="text-xs text-text-sub mt-2 text-right">精力充沛 ✨</p>
+            
+            <div class="flex justify-between items-center mt-2">
+                <p id="status-text" class="text-xs text-slate-400">精力充沛 ✨</p>
+                <button onclick="openSettings()" class="text-xs text-slate-400 underline hover:text-slate-600">云同步设置</button>
+            </div>
         </header>
 
-        <ul id="task-list" class="flex flex-col gap-4">
-            </ul>
+        <ul id="task-list" class="flex flex-col gap-4"></ul>
 
     </div>
 
-    <button onclick="openModal()" class="fixed bottom-8 right-8 w-14 h-14 bg-slate-800 text-white rounded-full shadow-xl shadow-slate-300/50 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-10">
+    <button onclick="openModal()" class="fixed bottom-8 right-8 w-14 h-14 bg-slate-800 text-white rounded-full shadow-xl shadow-slate-300/50 flex items-center justify-center hover:scale-105 transition-transform z-10">
         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
     </button>
 
-    <div id="modal" class="fixed inset-0 bg-white/60 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity duration-300">
+    <div id="modal" class="fixed inset-0 bg-white/60 backdrop-blur-sm hidden z-40 flex items-center justify-center opacity-0 transition-opacity duration-300">
         <div class="bg-white w-[85%] max-w-sm p-6 rounded-3xl shadow-2xl transform scale-95 transition-transform duration-300" id="modal-content">
             <h2 class="text-xl font-bold mb-4 text-slate-700">添加新事项</h2>
-            
-            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">任务名称</label>
-            <input type="text" id="input-title" class="w-full bg-slate-50 border-0 rounded-xl p-3 mb-4 text-slate-700 focus:ring-2 focus:ring-slate-200 outline-none transition" placeholder="例如：写周报">
-            
-            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">能量变动 (负数消耗，正数恢复)</label>
+            <input type="text" id="input-title" class="w-full bg-slate-50 border-0 rounded-xl p-3 mb-4 text-slate-700 focus:ring-2 focus:ring-slate-200 outline-none" placeholder="任务名称">
             <div class="flex gap-2 mb-4">
-                 <input type="number" id="input-energy" class="w-full bg-slate-50 border-0 rounded-xl p-3 text-slate-700 focus:ring-2 focus:ring-slate-200 outline-none transition" placeholder="-20">
+                 <input type="number" id="input-energy" class="w-full bg-slate-50 border-0 rounded-xl p-3 text-slate-700 focus:ring-2 focus:ring-slate-200 outline-none" placeholder="能量变动 (如 -20)">
             </div>
-
-            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">详情备注 (支持 Markdown)</label>
-            <textarea id="input-desc" rows="3" class="w-full bg-slate-50 border-0 rounded-xl p-3 mb-6 text-sm text-slate-600 focus:ring-2 focus:ring-slate-200 outline-none transition resize-none" placeholder="可以在这里记录灵感、步骤..."></textarea>
-
+            <textarea id="input-desc" rows="3" class="w-full bg-slate-50 border-0 rounded-xl p-3 mb-6 text-sm text-slate-600 focus:ring-2 focus:ring-slate-200 outline-none resize-none" placeholder="备注 (支持 Markdown)"></textarea>
             <div class="flex justify-end gap-3">
-                <button onclick="closeModal()" class="px-5 py-2 rounded-xl text-slate-500 hover:bg-slate-50 transition font-medium">取消</button>
-                <button onclick="addTask()" class="px-6 py-2 rounded-xl bg-slate-800 text-white shadow-lg shadow-slate-200 hover:bg-black transition font-medium">确认</button>
+                <button onclick="closeModal()" class="px-5 py-2 rounded-xl text-slate-500 hover:bg-slate-50 font-medium">取消</button>
+                <button onclick="addTask()" class="px-6 py-2 rounded-xl bg-slate-800 text-white shadow-lg hover:bg-black font-medium">确认</button>
             </div>
         </div>
     </div>
 
-    <script>
-        // === 状态管理 ===
-        const STATE = {
-            energy: 100,
-            tasks: []
-        };
+    <div id="settings-modal" class="fixed inset-0 bg-black/20 backdrop-blur-sm hidden z-50 flex items-center justify-center">
+        <div class="bg-white w-[85%] max-w-sm p-6 rounded-3xl shadow-2xl">
+            <h2 class="text-xl font-bold mb-2 text-slate-700">☁️ 云同步设置</h2>
+            <p class="text-xs text-slate-400 mb-4 leading-relaxed">在多台设备输入相同的“暗号”，即可实现数据同步。请把你的暗号设复杂点！</p>
+            
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">你的专属暗号</label>
+            <input type="text" id="sync-code-input" class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 mb-4 text-slate-700 text-center font-mono tracking-widest focus:border-slate-800 outline-none" placeholder="例如：MY-SECRET-999">
+            
+            <button onclick="saveSyncCode()" class="w-full py-3 rounded-xl bg-slate-800 text-white font-bold hover:bg-black transition mb-3">连接云端</button>
+            <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 text-sm">关闭</button>
+        </div>
+    </div>
 
-        // DOM 元素
+    <script>
+        // ==========================================
+        // ⚠️ 请在此处填入你的 Supabase 配置 (注意单引号)
+        // ==========================================
+        const SUPABASE_URL = 'https://ebwbaofzwjeypokwzvta.supabase.co'; 
+        const SUPABASE_KEY = 'sb_publishable_r2dimkI88sKHrNYSSXboBg_4uPQlB9m';
+        // ==========================================
+
+        // 修复：改用 client 变量名，防止和 CDN 全局变量冲突
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        const STATE = { energy: 100, tasks: [] };
+        let USER_SECRET_CODE = localStorage.getItem('nian_sync_code') || '';
+
         const elEnergyDisplay = document.getElementById('energy-display');
         const elEnergyBar = document.getElementById('energy-bar');
         const elStatusText = document.getElementById('status-text');
         const elTaskList = document.getElementById('task-list');
-        const elModal = document.getElementById('modal');
-        const elModalContent = document.getElementById('modal-content');
+        const elSyncStatus = document.getElementById('sync-status');
 
-        // === 初始化 ===
-        document.addEventListener('DOMContentLoaded', () => {
-            loadFromLocal();
+        document.addEventListener('DOMContentLoaded', async () => {
             renderUI();
+            
+            if (USER_SECRET_CODE) {
+                showSyncStatus('正在连接云端...', 'yellow');
+                await loadFromCloud();
+            } else {
+                loadFromLocal();
+                if(!localStorage.getItem('has_opened_before')) {
+                    setTimeout(openSettings, 1000);
+                    localStorage.setItem('has_opened_before', 'true');
+                }
+            }
         });
 
-        // === 核心逻辑：更新能量 ===
-        function updateEnergy(delta) {
-            let newEnergy = STATE.energy + delta;
-            if (newEnergy > 100) newEnergy = 100;
-            if (newEnergy < 0) newEnergy = 0;
+        async function saveData() {
+            localStorage.setItem('healing_energy_data', JSON.stringify(STATE));
             
-            STATE.energy = newEnergy;
-            saveToLocal();
-            renderEnergy(); // 只更新头部，不重绘列表
-        }
+            if (USER_SECRET_CODE) {
+                showSyncStatus('正在同步...', 'blue');
+                try {
+                    // 使用 supabaseClient 而不是 supabase
+                    const { error } = await supabaseClient
+                        .from('memo_sync')
+                        .upsert({ 
+                            secret_code: USER_SECRET_CODE, 
+                            backup_data: STATE 
+                        }, { onConflict: 'secret_code' });
 
-        function renderEnergy() {
-            // 1. 更新数值
-            elEnergyDisplay.innerText = STATE.energy;
-            
-            // 2. 更新进度条宽度
-            elEnergyBar.style.width = `${STATE.energy}%`;
-
-            // 3. 根据能量值改变颜色和背景 (Tailwind 类名操作在 body 上不太方便动态插值，这里用 JS 辅助)
-            const body = document.body;
-            
-            if (STATE.energy >= 70) {
-                // 高能量：暖色调
-                elEnergyBar.className = 'energy-bar-fill h-full w-full rounded-full bg-orange-400';
-                body.style.backgroundColor = '#fff7ed'; // healing-warm
-                elStatusText.innerText = "状态极佳 🔥";
-            } else if (STATE.energy <= 30) {
-                // 低能量：冷色调
-                elEnergyBar.className = 'energy-bar-fill h-full w-full rounded-full bg-blue-400';
-                body.style.backgroundColor = '#f1f5f9'; // healing-cold
-                elStatusText.innerText = "需要休息 💤";
-            } else {
-                // 正常
-                elEnergyBar.className = 'energy-bar-fill h-full w-full rounded-full bg-emerald-400';
-                body.style.backgroundColor = '#fdfcf8'; // healing-bg
-                elStatusText.innerText = "平稳运行 🌱";
+                    if (error) throw error;
+                    showSyncStatus('云端已同步', 'green');
+                } catch (e) {
+                    console.error(e);
+                    showSyncStatus('同步失败，仅本地保存', 'red');
+                }
             }
         }
 
-        // === 核心逻辑：任务管理 ===
+        async function loadFromCloud() {
+            try {
+                // 使用 supabaseClient 而不是 supabase
+                const { data, error } = await supabaseClient
+                    .from('memo_sync')
+                    .select('backup_data')
+                    .eq('secret_code', USER_SECRET_CODE)
+                    .single();
+
+                if (data && data.backup_data) {
+                    STATE.energy = data.backup_data.energy;
+                    STATE.tasks = data.backup_data.tasks;
+                    renderUI();
+                    saveData();
+                    showSyncStatus('已连接云端', 'green');
+                } else {
+                    saveData();
+                }
+            } catch (e) {
+                console.error("云端读取失败或无数据", e);
+                loadFromLocal();
+            }
+        }
+
+        function loadFromLocal() {
+            const data = JSON.parse(localStorage.getItem('healing_energy_data'));
+            if (data) {
+                STATE.energy = data.energy;
+                STATE.tasks = data.tasks;
+                renderUI();
+            }
+        }
+
+        function openSettings() {
+            document.getElementById('sync-code-input').value = USER_SECRET_CODE;
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+
+        function saveSyncCode() {
+            const code = document.getElementById('sync-code-input').value.trim();
+            if (code) {
+                USER_SECRET_CODE = code;
+                localStorage.setItem('nian_sync_code', code);
+                document.getElementById('settings-modal').classList.add('hidden');
+                loadFromCloud();
+            } else {
+                alert("请输入暗号，或者点击关闭以继续离线使用");
+            }
+        }
+
+        function showSyncStatus(text, color) {
+            elSyncStatus.style.opacity = '1';
+            elSyncStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-${color}-400"></span> ${text}`;
+            setTimeout(() => {
+                if(color === 'green') elSyncStatus.style.opacity = '0';
+            }, 3000);
+        }
+
+        function updateEnergy(delta) {
+            let newEnergy = STATE.energy + delta;
+            STATE.energy = Math.max(0, Math.min(100, newEnergy));
+            renderEnergy();
+            saveData();
+        }
+
         function addTask() {
             const title = document.getElementById('input-title').value.trim();
             const energyInput = document.getElementById('input-energy').value;
@@ -166,40 +230,37 @@
 
             if (!title) return document.getElementById('input-title').focus();
             
-            // 如果没填能量，默认根据任务性质猜一个，或者给 0
-            const energyVal = energyInput ? parseInt(energyInput) : -10;
-
             const newTask = {
                 id: Date.now(),
                 title: title,
-                energyChange: energyVal,
+                energyChange: energyInput ? parseInt(energyInput) : -10,
                 desc: desc,
-                completed: false,
                 expanded: false
             };
 
             STATE.tasks.unshift(newTask);
-            saveToLocal();
+            saveData();
             renderTaskList();
             closeModal();
+            
+            document.getElementById('input-title').value = '';
+            document.getElementById('input-energy').value = '';
+            document.getElementById('input-desc').value = '';
         }
 
         function completeTask(id) {
             const task = STATE.tasks.find(t => t.id === id);
             if (!task) return;
-
-            // 1. 应用能量变化 (消耗是负数，所以是 + (-20) = 减20；恢复是正数，直接加)
-            // 逻辑修正：如果任务是 -20，完成后应该扣除20能量
+            
             updateEnergy(task.energyChange);
 
-            // 2. UI 移除动画
             const domItem = document.getElementById(`task-${id}`);
             domItem.style.opacity = '0';
             domItem.style.transform = 'scale(0.9)';
 
             setTimeout(() => {
                 STATE.tasks = STATE.tasks.filter(t => t.id !== id);
-                saveToLocal();
+                saveData();
                 renderTaskList();
             }, 300);
         }
@@ -208,56 +269,8 @@
             const task = STATE.tasks.find(t => t.id === id);
             if (task) {
                 task.expanded = !task.expanded;
-                renderTaskList(); // 重绘以显示展开状态
+                renderTaskList();
             }
-        }
-
-        // === 渲染列表 ===
-        function renderTaskList() {
-            elTaskList.innerHTML = '';
-            
-            STATE.tasks.forEach(task => {
-                const isNegative = task.energyChange < 0;
-                const energyClass = isNegative ? 'text-rose-500 bg-rose-50' : 'text-emerald-500 bg-emerald-50';
-                const sign = task.energyChange > 0 ? '+' : '';
-                
-                // Markdown 解析
-                const mdContent = task.desc ? marked.parse(task.desc) : '';
-
-                const li = document.createElement('li');
-                li.id = `task-${task.id}`;
-                li.className = 'bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 group';
-                
-                li.innerHTML = `
-                    <div class="flex justify-between items-start cursor-pointer" onclick="toggleExpand(${task.id})">
-                        <div class="flex-1 pr-4">
-                            <h3 class="font-bold text-slate-700 text-lg leading-tight mb-1">${task.title}</h3>
-                            <div class="text-xs font-medium ${energyClass} inline-block px-2 py-1 rounded-md">
-                                ⚡ ${sign}${task.energyChange}
-                            </div>
-                        </div>
-                        
-                        <button onclick="event.stopPropagation(); completeTask(${task.id})" 
-                            class="w-10 h-10 rounded-full border-2 border-slate-100 flex items-center justify-center text-slate-300 hover:border-slate-800 hover:bg-slate-800 hover:text-white transition-all">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                        </button>
-                    </div>
-
-                    ${task.expanded && task.desc ? `
-                        <div class="mt-4 pt-4 border-t border-slate-100 text-sm text-slate-600 markdown-body animate-fade-in">
-                            ${mdContent}
-                        </div>
-                    ` : ''}
-                    
-                    ${!task.expanded && task.desc ? `
-                         <p class="mt-2 text-xs text-slate-400 truncate" onclick="toggleExpand(${task.id})">
-                            ${task.desc}
-                         </p>
-                    ` : ''}
-                `;
-                
-                elTaskList.appendChild(li);
-            });
         }
 
         function renderUI() {
@@ -265,48 +278,69 @@
             renderTaskList();
         }
 
-        // === 存储 ===
-        function saveToLocal() {
-            localStorage.setItem('healing_energy_data', JSON.stringify(STATE));
-        }
-
-        function loadFromLocal() {
-            const data = JSON.parse(localStorage.getItem('healing_energy_data'));
-            if (data) {
-                STATE.energy = data.energy;
-                STATE.tasks = data.tasks;
+        function renderEnergy() {
+            elEnergyDisplay.innerText = STATE.energy;
+            elEnergyBar.style.width = `${STATE.energy}%`;
+            
+            if (STATE.energy >= 70) {
+                elEnergyBar.className = 'energy-bar-fill h-full w-full rounded-full bg-orange-400';
+                document.body.style.backgroundColor = '#fff7ed';
+                elStatusText.innerText = "状态极佳 🔥";
+            } else if (STATE.energy <= 30) {
+                elEnergyBar.className = 'energy-bar-fill h-full w-full rounded-full bg-blue-400';
+                document.body.style.backgroundColor = '#f1f5f9';
+                elStatusText.innerText = "需要休息 💤";
+            } else {
+                elEnergyBar.className = 'energy-bar-fill h-full w-full rounded-full bg-emerald-400';
+                document.body.style.backgroundColor = '#fdfcf8';
+                elStatusText.innerText = "平稳运行 🌱";
             }
         }
 
-        // === 模态框控制 ===
+        function renderTaskList() {
+            elTaskList.innerHTML = '';
+            STATE.tasks.forEach(task => {
+                const isNegative = task.energyChange < 0;
+                const sign = task.energyChange > 0 ? '+' : '';
+                const mdContent = task.desc ? marked.parse(task.desc) : '';
+
+                const li = document.createElement('li');
+                li.id = `task-${task.id}`;
+                li.className = 'bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 group';
+                li.innerHTML = `
+                    <div class="flex justify-between items-start cursor-pointer" onclick="toggleExpand(${task.id})">
+                        <div class="flex-1 pr-4">
+                            <h3 class="font-bold text-slate-700 text-lg leading-tight mb-1">${task.title}</h3>
+                            <div class="text-xs font-medium ${isNegative ? 'text-rose-500 bg-rose-50' : 'text-emerald-500 bg-emerald-50'} inline-block px-2 py-1 rounded-md">
+                                ⚡ ${sign}${task.energyChange}
+                            </div>
+                        </div>
+                        <button onclick="event.stopPropagation(); completeTask(${task.id})" 
+                            class="w-10 h-10 rounded-full border-2 border-slate-100 flex items-center justify-center text-slate-300 hover:bg-slate-800 hover:text-white transition-all">
+                            ✓
+                        </button>
+                    </div>
+                    ${task.expanded && task.desc ? `<div class="mt-4 pt-4 border-t border-slate-100 text-sm text-slate-600 markdown-body">${mdContent}</div>` : ''}
+                    ${!task.expanded && task.desc ? `<p class="mt-2 text-xs text-slate-400 truncate" onclick="toggleExpand(${task.id})">${task.desc}</p>` : ''}
+                `;
+                elTaskList.appendChild(li);
+            });
+        }
+
         function openModal() {
-            elModal.classList.remove('hidden');
-            // 小延迟让 CSS transition 生效
+            const m = document.getElementById('modal');
+            m.classList.remove('hidden');
             setTimeout(() => {
-                elModal.classList.remove('opacity-0');
-                elModalContent.classList.remove('scale-95');
-                document.getElementById('input-title').focus();
+                m.classList.remove('opacity-0');
+                document.getElementById('modal-content').classList.remove('scale-95');
             }, 10);
-            
-            // 清空输入
-            document.getElementById('input-title').value = '';
-            document.getElementById('input-energy').value = '';
-            document.getElementById('input-desc').value = '';
         }
-
         function closeModal() {
-            elModal.classList.add('opacity-0');
-            elModalContent.classList.add('scale-95');
-            setTimeout(() => {
-                elModal.classList.add('hidden');
-            }, 300);
+            const m = document.getElementById('modal');
+            m.classList.add('opacity-0');
+            document.getElementById('modal-content').classList.add('scale-95');
+            setTimeout(() => m.classList.add('hidden'), 300);
         }
-        
-        // 模态框点击遮罩关闭
-        elModal.addEventListener('click', (e) => {
-            if (e.target === elModal) closeModal();
-        });
-
     </script>
 </body>
 </html>
